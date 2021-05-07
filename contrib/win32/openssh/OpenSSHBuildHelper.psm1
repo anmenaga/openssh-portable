@@ -322,7 +322,7 @@ function Start-OpenSSHPackage
     $payload += "sftp-server.exe", "scp.exe", "ssh-shellhost.exe", "ssh-keygen.exe", "ssh-keyscan.exe" 
     $payload += "sshd_config_default", "install-sshd.ps1", "uninstall-sshd.ps1"
     $payload += "FixHostFilePermissions.ps1", "FixUserFilePermissions.ps1", "OpenSSHUtils.psm1", "OpenSSHUtils.psd1"
-    $payload += "openssh-events.man"
+    $payload += "openssh-events.man", "moduli"
 
     $packageName = "OpenSSH-Win64"
     if ($NativeHostArch -ieq 'x86') {
@@ -627,7 +627,9 @@ function Get-Windows10SDKVersion
    $windowsSDKPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib"
    $minSDKVersion = [version]"10.0.14393.0"
    $versionsAvailable = @()
-   $versionsAvailable += Get-ChildItem $windowsSDKPath | ? {$_.Name.StartsWith("10.")} | % {$version = [version]$_.Name; if($version.CompareTo($minSDKVersion) -ge 0) {$version}}
+   #Temporary fix - Onecore builds are failing with latest widows 10 SDK (10.0.18362.0)
+   $maxSDKVersion = [version]"10.0.17763.0"
+   $versionsAvailable = Get-ChildItem $windowsSDKPath | ? {$_.Name.StartsWith("10.")} | % {$version = [version]$_.Name; if(($version.CompareTo($minSDKVersion) -ge 0) -and ($version.CompareTo($maxSDKVersion) -le 0)) {$version}}
    if(0 -eq $versionsAvailable.count)
    {
         return $null

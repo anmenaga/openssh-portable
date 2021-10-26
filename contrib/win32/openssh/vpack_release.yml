@@ -68,16 +68,17 @@ jobs:
     displayName: Create OneCore Package
   - task: ManifestGeneratorTask@0
     inputs:
-      BuildDropPath: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols
-      ManifestDirPath: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\_manifest
-  - task: PublishPipelineArtifact@1
-    inputs:
-      targetPath: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\_manifest\manifest.json
+      BuildDropPath: $(Build.StagingDirectory)/OpenSSH-Original/OpenSSH-$(OutputFolder)_symbols
+    env:
+      SBOMGenerator_Formats: spdx:2.2
   - pwsh: |
       dir "$(Build.StagingDirectory)\*" -Recurse
     name: ''
     displayName: dir staging directory
     continueOnError: True
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\_manifest\spdx_2.2\manifest.spdx.json
   - task: EsrpMalwareScanning@1
     displayName: ESRP Malware Scanning
     inputs:
@@ -98,10 +99,6 @@ jobs:
     - group: APIScan
     # PAT group contains vpack-pat and git-pat
     - group: PAT
-    - name: GITSUBMIT_CREATED_PULLREQUESTS
-      value: ""
-    - name: pr-num
-      value: 0
   pool:
     name: Powershell1ES
     demands:
@@ -144,6 +141,14 @@ jobs:
       AnalyzeVerbose: true
       AnalyzeHashes: true
       AnalyzeStatistics: true
+# Task needed to run ESRP scan because it wasn't finding the correct .net runtime version
+  - task: UseDotNet@2
+    displayName: 'Use .NET Core sdk'
+    inputs:
+      packageType: 'runtime'
+      version: '2.1.0'
+      installationPath: $(Agent.TempDirectory)/dotnet
+      performMultiLevelLookup: true
   - task: EsrpMalwareScanning@1
     displayName: ESRP Malware Scanning
     inputs:
@@ -232,13 +237,6 @@ jobs:
       uploadPREfast: false
       uploadRoslyn: false
       uploadTSLint: false
-  - task: securedevelopmentteam.vss-secure-development-tools.build-task-postanalysis.PostAnalysis@1
-    name: PostAnalysis_16
-    displayName: Post Analysis
-    condition: succeededOrFailed()
-    inputs:
-      APIScan: true
-      CredScan: true
   - task: ComponentGovernanceComponentDetection@0
     displayName: Component Detection
     continueOnError: True
@@ -361,15 +359,13 @@ jobs:
       ArtifactName: openssh
   - task: NuGetAuthenticate@0
     displayName: 'NuGet Authenticate'
-  - task: PkgESSecComp@10
-    enabled: false 
+  - task: PkgESSecComp@10 
     displayName: Security and Compliance tasks
     inputs:
       fileNewBugs: false
       checkInConfigPath: GitCheckin.json
       dropOverride: '$(XES_VPACKMANIFESTDIRECTORY)'
-    env:
-      SYSTEM_ACCESSTOKEN: $(vpack-pat)
+      vpackToken: $(vpack-pat)
   - task: PkgESFCIBGit@12
     inputs:
       configPath: 'GitCheckin.json'
@@ -378,15 +374,17 @@ jobs:
       paToken: $(git-pat)
       # pkgesgitsubmit is a project contributor so user token does not need to be set
       taskLogVerbosity: 'Diagnostic'
-  - pwsh: |
-      $val = $(GITSUBMIT_CREATED_PULLREQUESTS)['PullRequestId']
-      Write-Host "##vso[task.setvariable variable=pr-num]$val"
-    enabled: false
-    displayName: Parse PR Number
-    errorActionPreference: silentlyContinue
   - task: PkgESSendMail@10
     inputs:
       to: 'kryalava@microsoft.com;bagajjal@microsoft.com;slee@microsoft.com;daniel.maertens@microsoft.com;tessgauthier@microsoft.com;vthiebaut@microsoft.com'
       subject: 'ACTION REQUIRED: Package ES Git Submit Check-in'
       bodyType: 'string'
       body: "OpenSSH VPack Pull Request: https://dev.azure.com/microsoft/OS/_git/OS.2020/pullrequest/ - must see build log for PR number"
+  - task: securedevelopmentteam.vss-secure-development-tools.build-task-postanalysis.PostAnalysis@1
+    name: PostAnalysis_16
+    displayName: Post Analysis
+    condition: succeededOrFailed()
+    inputs:
+      APIScan: true
+      BinSkim: true
+      CredScan: true

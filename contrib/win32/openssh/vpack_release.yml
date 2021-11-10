@@ -29,6 +29,26 @@ jobs:
   steps:
   - checkout: self
     clean: true
+   # Download and extract nuget package with non-stubbed MicrosoftTelemetry.h header
+  - task: NuGetAuthenticate@0
+    inputs:
+      nuGetServiceConnections: msftNugetConnection
+  - task: NuGetCommand@2
+    inputs:
+      command: 'restore'
+      restoreSolution: '$(Build.SourcesDirectory)\contrib\win32\OpenSSH\packages.config'
+      feedsToUse: 'config'
+      nugetConfigPath: '$(Build.SourcesDirectory)\contrib\win32\OpenSSH\NuGet.config'
+      externalFeedCredentials: 'msftNugetConnection'
+      restoreDirectory: 'Nuget'
+  # Replace the stubbed MicrosoftTelemetry.h with the real version from the nuget package
+  # Delete the existing stubbed MicrosoftTelemetry.h first, to ensure that if it is no longer at the expected path that the task, and build, fails
+  # if package version changes in packages.config, folder name will need to be updated here
+  - pwsh : | 
+      del $(Build.SourcesDirectory)\contrib\win32\OpenSSH\MicrosoftTelemetry.h
+      mv $(Build.SourcesDirectory)\contrib\win32\OpenSSH\NuGet\Microsoft.Telemetry.Inbox.Native.10.0.18362.1-190318-1202.19h1-release.amd64fre\build\native\inc\MicrosoftTelemetry.h $(Build.SourcesDirectory)\contrib\win32\OpenSSH\
+    failOnStderr: true
+    displayName: 'MicrosoftTelemetry.h: replace with the real one'
   - pwsh : |
       Write-verbose "--docker info---" -verbose
 

@@ -199,8 +199,14 @@ jobs:
   - task: securedevelopmentteam.vss-secure-development-tools.build-task-binskim.BinSkim@4
     displayName: 'Run BinSkim '
     inputs:
+      InputType: 'Basic'
+      Function: 'analyze'
+      TargetPattern: 'binskimPattern'
+      AnalyzeTargetBinskim: |
+          $(System.ArtifactsDirectory)\OpenSSH-Win64\*.exe
+          $(System.ArtifactsDirectory)\OpenSSH-Win32\*.exe
       AnalyzeSymPath: '$(System.ArtifactsDirectory)\OpenSSH-Win64_Symbols;$(System.ArtifactsDirectory)\OpenSSH-Win32_Symbols'
-      AnalyzeConfigPath: $(Build.SourcesDirectory)\contrib\win32\OpenSSH\BinSkimConfig.xml
+      AnalyzeConfigPath: '$(Build.SourcesDirectory)\contrib\win32\OpenSSH\BinSkimConfig.xml'
       AnalyzeVerbose: true
       AnalyzeHashes: true
       AnalyzeStatistics: true

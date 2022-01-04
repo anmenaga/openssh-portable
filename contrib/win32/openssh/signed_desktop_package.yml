@@ -75,9 +75,22 @@ jobs:
     name: ''
     displayName: dir Build.StagingDirectory directory
     continueOnError: True
-  - task: PublishPipelineArtifact@1
+  # binaries need to be in specific install folder to be found by wixproject
+  - pwsh: |
+      if (-not (Test-Path $(Build.SourcesDirectory)\bin\$(Architecture)\Release))
+      {
+        New-Item -Path '$(Build.SourcesDirectory)\bin\$(Architecture)\Release' -ItemType Directory
+      }
+      Copy-Item -Path "$(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\*" -Destination "$(Build.SourcesDirectory)\bin\$(Architecture)\Release" -Recurse
+    name: ''
+    displayName: Copy Binaries to Wix Folder
+  - task: VSBuild@1
+    displayName: 'Build installer'
     inputs:
-      targetPath: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\_manifest\spdx_2.2\manifest.spdx.json
+      solution: 'contrib/win32/install/openssh.wixproj'
+      platform: $(Architecture)
+      configuration: Release
+      msbuildArgs: '/p:SuppressIces="ICE18"'
   - task: ComponentGovernanceComponentDetection@0
     displayName: Component Detection
   - pwsh: | 
@@ -142,6 +155,18 @@ jobs:
   - pwsh: |
       $(Build.SourcesDirectory)\contrib\win32\OpenSSH\vstsbuild.ps1 -BuildPath $(BinaryPath)
     displayName: Create Signed Desktop Package
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\_manifest\spdx_2.2\manifest.spdx.json
+      ArtifactName: 'Manifest_$(Architecture)'
+      publishLocation: 'Container'
+    displayName: Publish Manifest 
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: $(Build.SourcesDirectory)\contrib\win32\install\bin\$(Architecture)\Release\
+      ArtifactName: 'MSI_$(Architecture)'
+      publishLocation: 'Container'
+    displayName: Publish MSI
 # the remaining tasks in the job are conditional on the buildNugetFlag parameter, as building the nuget package is only necessary when publishing the VM extension
   - pwsh: | 
       $(Build.SourcesDirectory)\contrib\win32\OpenSSH\createNugetPackageManifest.ps1 -Architecture $(Architecture) -ManifestDir "$(Build.ArtifactStagingDirectory)" -BinaryPath "$(BinaryPath)" -PackageVersion $(NugetPackageVersion) -OpenSSHVersion $(ReleaseTag)

@@ -24,6 +24,7 @@ jobs:
   cancelTimeoutInMinutes: 1
   pool:
     name: PowerShell1ES
+    vmImage: MMS2019TLS #EO requirement - TLS Image
     demands:
     - docker
   steps:
@@ -86,19 +87,11 @@ jobs:
   - pwsh: | 
       $(Build.SourcesDirectory)\contrib\win32\OpenSSH\vstsbuild.ps1 -BuildPath $(BinaryPath)
     displayName: Create OneCore Package
-  - task: ManifestGeneratorTask@0
-    inputs:
-      BuildDropPath: $(Build.StagingDirectory)/OpenSSH-Original/OpenSSH-$(OutputFolder)_symbols
-    env:
-      SBOMGenerator_Formats: spdx:2.2
   - pwsh: |
       dir "$(Build.StagingDirectory)\*" -Recurse
     name: ''
     displayName: dir staging directory
     continueOnError: True
-  - task: PublishPipelineArtifact@1
-    inputs:
-      targetPath: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\_manifest\spdx_2.2\manifest.spdx.json
   - task: EsrpMalwareScanning@1
     displayName: ESRP Malware Scanning
     inputs:

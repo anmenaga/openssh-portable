@@ -158,14 +158,6 @@ jobs:
       AnalyzeVerbose: true
       AnalyzeHashes: true
       AnalyzeStatistics: true
-# Task needed to run ESRP scan because it wasn't finding the correct .net runtime version
-  - task: UseDotNet@2
-    displayName: 'Use .NET Core sdk'
-    inputs:
-      packageType: 'runtime'
-      version: '2.1.0'
-      installationPath: $(Agent.TempDirectory)/dotnet
-      performMultiLevelLookup: true
   - task: EsrpMalwareScanning@1
     displayName: ESRP Malware Scanning
     inputs:
@@ -361,7 +353,7 @@ jobs:
       metadata: $(Build.SourceVersion)
       feeds: Nuget.vPack
       publishvNuget: false
-      taskLogVerbosity: Diagnostic
+      taskLogVerbosity: Diagnostic 
   - task: PublishPipelineArtifact@1
     displayName: Publish Pipeline Artifact
     enabled: False

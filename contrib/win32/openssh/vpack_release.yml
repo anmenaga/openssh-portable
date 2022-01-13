@@ -104,7 +104,7 @@ jobs:
       MaxRetryAttempts: '5'
 - job: static_analysis
   displayName: 2 - Compliance Tests and Post Build Analysis
-  timeoutInMinutes: 30
+  timeoutInMinutes: 45
   cancelTimeoutInMinutes: 1
   dependsOn: build
   variables:

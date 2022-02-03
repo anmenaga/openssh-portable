@@ -51,7 +51,7 @@ if(-not (Test-Path $zip_path))
 }
 
 # XXX check pgp sig?
-Expand-Archive -Path $zip_path -DestinationPath $destDir -Force -ErrorAction SilentlyContinue -ErrorVariable e
+Expand-Archive -Path $zip_path -DestinationPath $destDir\libfido2 -Force -ErrorAction SilentlyContinue -ErrorVariable e
 if($e -ne $null)
 {
     throw "Error when expand zip file. libfido2 version:$version"

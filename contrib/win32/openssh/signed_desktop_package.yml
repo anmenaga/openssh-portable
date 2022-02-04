@@ -1,0 +1,362 @@
+name: $(BuildDefinitionName)-$(date:yyMM).$(date:dd)$(rev:rrr)
+trigger: none
+resources:
+  repositories:
+  - repository: self
+    type: git
+    ref: refs/heads/git_ps_latestw_all
+parameters:
+- name: buildNugetFlag
+  default: false
+  type: boolean
+jobs:
+- job: Build_OpenSSH
+  strategy:
+    maxParallel: 2
+    matrix:
+      X86:
+        Architecture: 'x86'
+        OutputFolder: 'Win32'
+      X64:
+        Architecture: 'x64'
+        OutputFolder: 'Win64'
+  variables:
+    BinaryPath: ""
+  displayName: 1 - Build and digital sign binaries and scripts
+  timeoutInMinutes: 220
+  cancelTimeoutInMinutes: 1
+  pool:
+    name: PowerShell1ES
+    vmImage: MMS2019TLS #EO requirement - TLS Image
+    demands:
+    - docker
+  steps:
+  - checkout: self
+    clean: true
+    persistCredentials: True
+  - task: PkgESSetupBuild@12
+    name: PkgESSetupBuild1
+    displayName: Initialize build for code signing
+    inputs:
+      useDfs: false
+      productName: OpenSSH
+      branchVersionExcludeBranch: ''
+  - pwsh : |
+      Write-verbose "--docker info---" -verbose
+
+      docker info
+
+      Write-verbose "--docker image ls---" -verbose
+
+      docker image ls
+
+      Write-verbose "--docker container ls --all---" -verbose
+
+      docker container ls --all
+
+      Write-verbose "--git branch ---" -verbose
+
+      git branch
+
+      exit 0
+    name: PowerShell_1
+    displayName: Get Environment
+  - pwsh: | 
+      $(Build.SourcesDirectory)\contrib\win32\OpenSSH\vstsbuild.ps1 -Name $(Architecture)
+    displayName: Build Desktop Package
+    env:
+      MY_ACCESS_TOKEN: $(System.AccessToken)
+  - pwsh: |
+      dir "$(Build.StagingDirectory)\*" -Recurse
+    name: ''
+    displayName: dir Build.StagingDirectory directory
+    continueOnError: True
+  # binaries need to be in specific install folder to be found by wixproject
+  - pwsh: |
+      if (-not (Test-Path $(Build.SourcesDirectory)\bin\$(Architecture)\Release))
+      {
+        New-Item -Path '$(Build.SourcesDirectory)\bin\$(Architecture)\Release' -ItemType Directory
+      }
+      Copy-Item -Path "$(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\*" -Destination "$(Build.SourcesDirectory)\bin\$(Architecture)\Release" -Recurse
+    name: ''
+    displayName: Copy Binaries to Wix Folder
+  - task: VSBuild@1
+    displayName: 'Build installer'
+    inputs:
+      solution: 'contrib/win32/install/openssh.wixproj'
+      platform: $(Architecture)
+      configuration: Release
+      msbuildArgs: '/p:SuppressIces="ICE18"'
+  - task: ComponentGovernanceComponentDetection@0
+    displayName: Component Detection
+  - pwsh: | 
+      $(Build.SourcesDirectory)\contrib\win32\openssh\UpdateSigning.ps1
+    displayName: Update Signing Xml
+  - pwsh: |
+      $vstsCommandString = "vso[task.setvariable variable=BinaryPath]${env:OpenSSH-$(Architecture)}"
+      Write-Host "sending " + $vstsCommandString
+      Write-Host "##$vstsCommandString"
+    displayName: Get BinaryPath
+  - task: UseDotNet@2
+    displayName: Use .NET Core sdk 2.x
+    inputs:
+      version: 2.x
+  # ESRP code signing tasks include malware scanning
+  - task: EsrpCodeSigning@1
+    displayName: ESRP CodeSigning - OpenSSH binaries
+    inputs:
+      ConnectedServiceName: ffbc858c-fcfc-4bb4-9d9d-8c63e50214c2
+      FolderPath: $(BinaryPath)
+      Pattern: '*.exe,*.ps1,*.psd1,*.psm1'
+      signConfigType: inlineSignParams
+      inlineOperation: |
+        [{
+            "toolVersion":  "6.2.9304.0",
+            "operationCode":  "SigntoolSign",
+            "parameters":  {
+                               "TimeStamp":  "/tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256",
+                               "FileDigest":  "/fd sha256",
+                               "OpusName":  "Microsoft",
+                               "OpusInfo":  "http://www.microsoft.com",
+                               "PageHash":  "/NPH"
+                           },
+            "keyCode":  "CP-230012",
+            "toolName":  "signtool.exe"
+        }]
+  - task: EsrpCodeSigning@1
+    displayName: ESRP CodeSigning - Libcrypto.dll (3rd party cert)
+    inputs:
+      ConnectedServiceName: ffbc858c-fcfc-4bb4-9d9d-8c63e50214c2
+      FolderPath: $(BinaryPath)
+      Pattern: '*.dll'
+      signConfigType: inlineSignParams
+      inlineOperation: |
+        [{
+            "toolVersion":  "6.2.9304.0",
+            "operationCode":  "SigntoolSign",
+            "parameters":  {
+                               "TimeStamp":  "/tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256",
+                               "FileDigest":  "/fd sha256",
+                               "OpusName":  "Microsoft",
+                               "OpusInfo":  "http://www.microsoft.com",
+                               "PageHash":  "/NPH"
+                           },
+            "keyCode":  "CP-231522",
+            "toolName":  "signtool.exe"
+        }]
+  - pwsh: |
+      del $(BinaryPath)\CodeSignSummary*
+      dir "$(BinaryPath)\*" -Recurse
+    displayName: dir $(BinaryPath)
+  - pwsh: |
+      $(Build.SourcesDirectory)\contrib\win32\OpenSSH\vstsbuild.ps1 -BuildPath $(BinaryPath)
+    displayName: Create Signed Desktop Package
+  - task: ManifestGeneratorTask@0
+    inputs:
+      BuildDropPath: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols
+    env:
+      SBOMGenerator_Formats: spdx:2.2
+  - pwsh: |
+      import-module $(Build.SourcesDirectory)\contrib\win32\OpenSSH\packaging.psm1 -Verbose
+      $manifestCheck = Test-PackageManifest -PackagePath $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols
+      $validManifest = 'true'
+      foreach ($check in $manifestCheck)
+      {
+        if ($check.status -ne 'match')
+        {
+          Write-verbose $check.file -verbose
+          $validManifest = 'false'
+        }
+      }
+      if ($validManifest -ne 'true')
+      {
+        throw "Invalid Manifest"
+      }
+      else
+      {
+        Write-verbose "Valid Manifest" -verbose 
+      }
+    displayName: Test Manifest
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: $(Build.StagingDirectory)\OpenSSH-Original\OpenSSH-$(OutputFolder)_symbols\_manifest\spdx_2.2\manifest.spdx.json
+      ArtifactName: 'Manifest_$(Architecture)'
+      publishLocation: 'Container'
+    displayName: Publish Manifest 
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: $(Build.SourcesDirectory)\contrib\win32\install\bin\$(Architecture)\Release\
+      ArtifactName: 'MSI_$(Architecture)'
+      publishLocation: 'Container'
+    displayName: Publish MSI
+# the remaining tasks in the job are conditional on the buildNugetFlag parameter, as building the nuget package is only necessary when publishing the VM extension
+  - pwsh: | 
+      $(Build.SourcesDirectory)\contrib\win32\OpenSSH\createNugetPackageManifest.ps1 -Architecture $(Architecture) -ManifestDir "$(Build.ArtifactStagingDirectory)" -BinaryPath "$(BinaryPath)" -PackageVersion $(NugetPackageVersion) -OpenSSHVersion $(ReleaseTag)
+    displayName: Update NuGet Package Manifest
+    errorActionPreference: silentlyContinue
+    condition: eq('${{ parameters.buildNugetFlag }}', 'true')
+  - task: NuGetAuthenticate@0
+    displayName: NuGet Authenticate
+    condition: eq('${{ parameters.buildNugetFlag }}', 'true')
+  - task: NuGetCommand@2
+    displayName: NuGet pack
+    inputs:
+      command: pack
+      searchPatternPack: $(Build.ArtifactStagingDirectory)\Win32-OpenSSH-$(Architecture).nuspec
+    condition: eq('${{ parameters.buildNugetFlag }}', 'true')
+  - task: NuGetCommand@2
+    displayName: NuGet push
+    inputs:
+      command: push
+      searchPatternPush: $(Build.ArtifactStagingDirectory)/*.nupkg
+      feedPublish: d0b2f921-6924-4728-b44b-7de7d5175bfb/81d37527-43dc-4ab3-8b4a-e07582778106
+    condition: eq('${{ parameters.buildNugetFlag }}', 'true')
+- job: Compliance
+  displayName: 2 - Compliance Tests and Post Build Analysis
+  timeoutInMinutes: 220
+  cancelTimeoutInMinutes: 1
+  dependsOn: Build_OpenSSH
+  variables:
+    # APIScan group contains APIScanTenant, APIScanClient, and APIScanSecret variables
+    - group: APIScan
+  pool:
+    name: PowerShell1ES
+    demands:
+    - docker
+  steps:
+  - checkout: self
+    clean: true
+  - task: DownloadBuildArtifacts@0
+    name: ''
+    displayName: Download artifacts
+    inputs:
+      downloadType: specific
+      artifactName: PowerShell-$(Version)-symbols-win-x86.zip
+      itemPattern: OpenSSH-Win@(32|64|32_Symbols|64_Symbols)/**
+      extractTars: false
+  - pwsh: |
+      dir "$(System.ArtifactsDirectory)\*" -Recurse
+    displayName: dir artifacts directory copy
+    continueOnError: True
+  - pwsh: |
+      dir "$(Build.SourcesDirectory)\*"
+    name: ''
+    displayName: dir sources directory copy
+    continueOnError: True
+  - task: securedevelopmentteam.vss-secure-development-tools.build-task-binskim.BinSkim@4
+    displayName: 'Run BinSkim '
+    inputs:
+      InputType: 'Basic'
+      Function: 'analyze'
+      TargetPattern: 'binskimPattern'
+      AnalyzeTargetBinskim: |
+          $(System.ArtifactsDirectory)\OpenSSH-Win64\*.exe
+          $(System.ArtifactsDirectory)\OpenSSH-Win32\*.exe
+      AnalyzeSymPath: '$(System.ArtifactsDirectory)\OpenSSH-Win64_Symbols;$(System.ArtifactsDirectory)\OpenSSH-Win32_Symbols'
+      AnalyzeConfigPath: '$(Build.SourcesDirectory)\contrib\win32\OpenSSH\BinSkimConfig.xml'
+      AnalyzeVerbose: true
+      AnalyzeHashes: true
+      AnalyzeStatistics: true
+# Task needed to run ESRP scan because it wasn't finding the correct .net runtime version
+  - task: UseDotNet@2
+    displayName: 'Use .NET Core sdk'
+    inputs:
+      packageType: 'runtime'
+      version: '2.1.0'
+      installationPath: $(Agent.TempDirectory)/dotnet
+      performMultiLevelLookup: true
+  - task: EsrpMalwareScanning@1
+    inputs:
+      ConnectedServiceName: 'pwshScanning'
+      FolderPath: '$(System.ArtifactsDirectory)'
+      Pattern: '*.json,*.pdb,*.man,*.log,*.txt'
+      Region: 'PuertoRico'
+      SessionTimeout: '30'
+      MaxConcurrency: '50'
+      MaxRetryAttempts: '5'
+  - task: securedevelopmentteam.vss-secure-development-tools.build-task-credscan.CredScan@2
+    displayName: 'Run CredScan'
+    inputs:
+      toolMajorVersion: V2
+      toolVersionV2: LatestPreRelease
+      scanFolder: $(Build.SourcesDirectory)
+      # work item opened to remove suppression file in the future
+      suppressionsFile: $(Build.SourcesDirectory)\contrib\win32\openssh\CredScanSuppress.json
+      debugMode: false
+      folderSuppression: false
+    continueOnError: true
+  - task: PoliCheck@1
+    name: PoliCheck_13
+    displayName: Run PoliCheck
+    continueOnError: True
+    inputs:
+      targetType: F
+      optionsFC: 0
+      optionsXS: 1
+      optionsPE: '1|2|3|4'
+      optionsHMENABLE: 0
+  - task: APIScan@2
+    name: ''
+    displayName: Run APIScan
+    continueOnError: True
+    inputs:
+      softwareFolder: $(System.ArtifactsDirectory)\OpenSSH-Win64;$(System.ArtifactsDirectory)\OpenSSH-Win32
+      softwareName: OpenSSH
+      softwareVersionNum: $(ReleaseTag)
+      symbolsFolder: $(System.ArtifactsDirectory)\OpenSSH-Win64_Symbols;$(System.ArtifactsDirectory)\OpenSSH-Win32_Symbols
+      isLargeApp: false
+    env:
+      AzureServicesAuthConnectionString: RunAs=App;AppId=$(APIScanClient);TenantId=$(APIScanTenant);AppKey=$(APIScanSecret)
+  - task: AutoApplicability@1
+    name: ''
+    displayName: Run AutoApplicability
+    continueOnError: True
+    inputs:
+      ExternalRelease: true
+      IsSoftware: true
+      DataSensitivity: lbi
+  - task: CodeMetrics@1
+    name: ''
+    displayName: 'Run CodeMetrics '
+    continueOnError: True
+    # work item opened to enable task in the future
+    enabled: False 
+    inputs:
+      Files: $(System.ArtifactsDirectory)\OpenSSH-Win64\*.exe;$(System.ArtifactsDirectory)\OpenSSH-Win64\*.dll;$(System.ArtifactsDirectory)\OpenSSH-Win32\*.exe;$(System.ArtifactsDirectory)\OpenSSH-Win32\*.dll;
+  - task: VulnerabilityAssessment@0
+    name: ''
+    displayName: Run Vulnerability Assessment
+    continueOnError: True
+  - task: SDLNativeRules@2
+    name: ''
+    displayName: Run the PREfast SDL Native Rules for MSBuild
+    # work item opened to enable task in the future
+    enabled: False
+  - task: securedevelopmentteam.vss-secure-development-tools.build-task-publishsecurityanalysislogs.PublishSecurityAnalysisLogs@2
+    name: ''
+    displayName: Publish Security Analysis Logs
+    continueOnError: True
+  - task: TSAUpload@1
+    name: ''
+    displayName: 'TSA upload to Codebase: OpenSSHOneCore Stamp: Azure'
+    inputs:
+      tsaVersion: TsaV2
+      tsaStamp: Azure
+      codeBaseName: OpenSSHOneCore
+      uploadFortifySCA: false
+      uploadFxCop: false
+      uploadModernCop: false
+      uploadPREfast: false
+      uploadRoslyn: false
+      uploadTSLint: false
+  - task: ComponentGovernanceComponentDetection@0
+    displayName: Component Detection
+    continueOnError: True
+  - task: ms-codeanalysis.vss-microsoft-security-code-analysis-devops.build-task-postanalysis.PostAnalysis@1
+    name: PostAnalysis_16
+    displayName: Post Analysis
+    inputs:
+      APIScan: true
+      BinSkim: true
+      CredScan: true
+

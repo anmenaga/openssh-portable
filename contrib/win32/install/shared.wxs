@@ -4,7 +4,7 @@
         <ComponentGroup Id="Shared" Directory="INSTALLFOLDER">
             <Component>
                 <File Name="libcrypto.dll" KeyPath="yes" />
-                <File Name="libcrypto.pdb" />
+                <File Name="libcrypto.pdb" Hidden="yes"/>
             </Component>
             <Component>
                 <File Name="moduli">
@@ -18,12 +18,30 @@
                 <File Name="NOTICE.txt" />
             </Component>
             <Component>
+                <File Name="FixHostFilePermissions.ps1" />
+            </Component>
+            <Component>
+                <File Name="OpenSSHUtils.psd1" />
+            </Component>
+            <Component>
+                <File Name="FixUserFilePermissions.ps1" />
+            </Component>
+            <Component>
+                <File Name="OpenSSHUtils.psm1" />
+            </Component>
+            <Component>
+                <File Name="install-sshd.ps1" />
+            </Component>
+            <Component>
+                <File Name="uninstall-sshd.ps1" />
+            </Component>
+            <Component>
                 <File Name="scp.exe" KeyPath="yes" />
-                <File Name="scp.pdb" />
+                <File Name="scp.pdb" Hidden="yes" />
             </Component>
             <Component>
                 <File Name="ssh-keygen.exe" KeyPath="yes" />
-                <File Name="ssh-keygen.pdb" />
+                <File Name="ssh-keygen.pdb" Hidden="yes" />
             </Component>
 
             <!-- ssh-agent is useful in both client and server scenarios. -->
@@ -35,7 +53,7 @@
             <Component>
                 <!-- Define the File/@Id to reference in util:EventManifest/@ResourceFile above. -->
                 <File Id="ssh_agent.exe" Name="ssh-agent.exe" KeyPath="yes" />
-                <File Name="ssh-agent.pdb" />
+                <File Name="ssh-agent.pdb" Hidden="yes" />
                 <ServiceInstall
                     Name="ssh-agent"
                     DisplayName="OpenSSH Authentication Agent"

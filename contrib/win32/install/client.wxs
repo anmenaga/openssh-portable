@@ -5,27 +5,27 @@
             <ComponentGroupRef Id="Shared" />
             <Component>
                 <File Name="ssh.exe" KeyPath="yes" />
-                <File Name="ssh.pdb" />
+                <File Name="ssh.pdb" Hidden="yes"/>
             </Component>
             <Component>
                 <File Name="sftp.exe" KeyPath="yes" />
-                <File Name="sftp.pdb" />
+                <File Name="sftp.pdb" Hidden="yes"/>
             </Component>
             <Component>
                 <File Name="ssh-add.exe" KeyPath="yes" />
-                <File Name="ssh-add.pdb" />
+                <File Name="ssh-add.pdb" Hidden="yes"/>
             </Component>
             <Component>
                 <File Name="ssh-keyscan.exe" KeyPath="yes" />
-                <File Name="ssh-keyscan.pdb" />
+                <File Name="ssh-keyscan.pdb" Hidden="yes"/>
             </Component>
             <Component>
                 <File Name="ssh-sk-helper.exe" KeyPath="yes" />
-                <File Name="ssh-sk-helper.pdb" />
+                <File Name="ssh-sk-helper.pdb" Hidden="yes"/>
             </Component>
             <Component>
                 <File Name="ssh-pkcs11-helper.exe" KeyPath="yes" />
-                <File Name="ssh-pkcs11-helper.pdb" />
+                <File Name="ssh-pkcs11-helper.pdb" Hidden="yes"/>
             </Component>
             <Component Id="ClientPATH" Guid="F07FFA0C-B5CF-45A3-9013-A7420DDFD654">
                 <!-- Use same property condition as PowerShell. We can use a shared component GUID here because there should be only one installed on a system. -->

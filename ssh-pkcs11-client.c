@@ -509,10 +509,12 @@ pkcs11_start_helper(void)
 #endif
 	/* success */
 	debug3_f("started pid=%ld", (long)pid);
+#ifdef WINDOWS
 out:
 	if (client_token)
 		CloseHandle(client_token);
 	return r;
+#endif
 }
 
 int
@@ -559,7 +561,7 @@ pkcs11_add_provider(char *name, char *pin, struct sshkey ***keysp,
 			if (labelsp)
 				(*labelsp)[i] = label;
 			else
-				free(label);
+				free(label); // CodeQL [SM03650]: false positive label not previously freed
 			free(blob);
 		}
 	} else if (type == SSH2_AGENT_FAILURE) {

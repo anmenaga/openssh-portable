@@ -198,7 +198,7 @@ agent_cleanup_connection(struct agent_connection* con)
 	if (con->client_process_handle)
 		CloseHandle(con->client_process_handle);
 
-	for (int i = 0; i < con->nsession_ids; i++) {
+	for (size_t i = 0; i < con->nsession_ids; i++) {
 		sshkey_free(con->session_ids[i].key);
 		sshbuf_free(con->session_ids[i].sid);
 	}
@@ -300,11 +300,13 @@ get_con_client_info(struct agent_connection* con)
 		goto done;
 	}
 
-	if (GetTokenInformation(client_primary_token, TokenUser, NULL, 0, &info_len) == TRUE ||
-		(info = (TOKEN_USER*)malloc(info_len)) == NULL ||
-		GetTokenInformation(client_primary_token, TokenUser, info, info_len, &info_len) == FALSE)
+	if (GetTokenInformation(client_primary_token, TokenUser, NULL, 0, &info_len) == TRUE || // CodeQL [SM02320]: GetTokenInformation will initialize info
+		(info = (TOKEN_USER*)malloc(info_len)) == NULL) 
 		goto done;
 
+	if (GetTokenInformation(client_primary_token, TokenUser, info, info_len, &info_len) == FALSE)
+		goto done;
+	
 	/* check if its localsystem */
 	if (IsWellKnownSid(info->User.Sid, WinLocalSystemSid)) {
 		con->client_type = SYSTEM;

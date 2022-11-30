@@ -606,6 +606,10 @@ kex_input_kexinit(int type, u_int32_t seq, struct ssh *ssh)
 	}
 	ssh_dispatch_set(ssh, SSH2_MSG_KEXINIT, NULL);
 	ptr = sshpkt_ptr(ssh, &dlen);
+	if (ptr == NULL) { // fix CodeQL SM02313
+		error_f("kex packet pointer failure");
+		return SSH_ERR_INTERNAL_ERROR;
+	}
 	if ((r = sshbuf_put(kex->peer, ptr, dlen)) != 0)
 		return r;
 

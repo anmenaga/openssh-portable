@@ -151,6 +151,7 @@
 #define HAVE_FIDO_DEV_GET_TOUCH_STATUS
 #define HAVE_FIDO_CRED_SET_CLIENTDATA
 #define HAVE_FIDO_ASSERT_SET_CLIENTDATA
+#define HAVE_FIDO_DEV_IS_WINHELLO
 
 /* File names may not contain backslash characters */
 /* #undef FILESYSTEM_NO_BACKSLASH */
@@ -206,13 +207,13 @@
 /* #undef HAVE_ADDR_V6_IN_UTMPX */
 
 /* Define to 1 if you have the `arc4random' function. */
-/* #undef HAVE_ARC4RANDOM */
+#define HAVE_ARC4RANDOM 1
 
 /* Define to 1 if you have the `arc4random_buf' function. */
-/* #undef HAVE_ARC4RANDOM_BUF */
+#define HAVE_ARC4RANDOM_BUF 1
 
 /* Define to 1 if you have the `arc4random_uniform' function. */
-/* #undef HAVE_ARC4RANDOM_UNIFORM */
+#define HAVE_ARC4RANDOM_UNIFORM 1
 
 /* Define to 1 if you have the `asprintf' function. */
 /* #undef HAVE_ASPRINTF */
@@ -1358,6 +1359,7 @@
 /* libcrypto includes complete ECC support */
 #define OPENSSL_HAS_ECC 1
 #define OPENSSL_HAS_NISTP521 1
+#define HAVE_EC_KEY_METHOD_NEW 1
 
 /* libcrypto is missing AES 192 and 256 bit functions */
 /* #undef OPENSSL_LOBOTOMISED_AES */
@@ -1732,3 +1734,7 @@
 #define WITH_ZLIB
 #define _PATH_TTY "conin$"
 #define HAVE_STRUCT_POLLFD_FD 1
+#define HAVE_KILLPG 1
+
+
+

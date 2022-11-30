@@ -3,6 +3,7 @@
 # @manojampalam - removed ntrights.exe dependency
 # @bingbing8 - removed secedit.exe dependency
 # @tessgauthier - added permissions check for %programData%/ssh
+# @tessgauthier - added update to system path for scp/sftp discoverability
 
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact="High")]
 param ()
@@ -86,7 +87,13 @@ if (Test-Path $sshAgentRegPath)
 $moduliPath = Join-Path $PSScriptRoot "moduli"
 if (Test-Path $moduliPath -PathType Leaf)
 {
-    Repair-ModuliFilePermission -FilePath $moduliPath @psBoundParameters -confirm:$false
+    # if user calls .\install-sshd.ps1 with -confirm, use that
+    # otherwise, need to preserve legacy behavior
+    if (-not $PSBoundParameters.ContainsKey('confirm'))
+    {
+        $PSBoundParameters.add('confirm', $false)
+    }
+    Repair-ModuliFilePermission -FilePath $moduliPath @psBoundParameters
 }
 
 # If %programData%/ssh folder already exists, verify and, if necessary and approved by user, fix permissions 
@@ -120,3 +127,6 @@ New-Service -Name sshd -DisplayName "OpenSSH SSH Server" -BinaryPathName `"$sshd
 sc.exe privs sshd SeAssignPrimaryTokenPrivilege/SeTcbPrivilege/SeBackupPrivilege/SeRestorePrivilege/SeImpersonatePrivilege
 
 Write-Host -ForegroundColor Green "sshd and ssh-agent services successfully installed"
+
+# add folder to system PATH
+Add-MachinePath -FilePath $scriptdir @psBoundParameters

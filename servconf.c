@@ -217,6 +217,7 @@ assemble_algorithms(ServerOptions *o)
 	all_kex = kex_alg_list(',');
 	all_key = sshkey_alg_list(0, 0, 1, ',');
 	all_sig = sshkey_alg_list(0, 1, 1, ',');
+	if (NULL == all_key || NULL == all_sig) goto fail; // fix CodeQL SM02311
 	/* remove unsupported algos from default lists */
 	def_cipher = match_filter_allowlist(KEX_SERVER_ENCRYPT, all_cipher);
 	def_mac = match_filter_allowlist(KEX_SERVER_MAC, all_mac);
@@ -236,6 +237,7 @@ assemble_algorithms(ServerOptions *o)
 	ASSEMBLE(pubkey_accepted_algos, def_key, all_key);
 	ASSEMBLE(ca_sign_algorithms, def_sig, all_sig);
 #undef ASSEMBLE
+fail:
 	free(all_cipher);
 	free(all_mac);
 	free(all_kex);
@@ -1048,7 +1050,7 @@ match_cfg_line(char **condition, int line, struct connection_info *ci)
 		    ci->address ? ci->address : "(null)",
 		    ci->laddress ? ci->laddress : "(null)", ci->lport);
 
-	while ((attrib = strdelim(&cp)) && *attrib != '\0') {
+	while ((attrib = strdelim(&cp)) && *attrib != '\0') { // CodeQL [SM02311]: false positive attrib is null checked
 		/* Terminate on comment */
 		if (*attrib == '#') {
 			cp = NULL; /* mark all arguments consumed */

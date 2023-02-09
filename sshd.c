@@ -1,4 +1,4 @@
-/* $OpenBSD: sshd.c,v 1.591 2022/09/17 10:34:29 djm Exp $ */
+/* $OpenBSD: sshd.c,v 1.596 2023/01/18 01:50:21 millert Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -1310,7 +1310,7 @@ usage(void)
 {
 	fprintf(stderr, "%s, %s\n", SSH_RELEASE, SSH_OPENSSL_VERSION);
 	fprintf(stderr,
-"usage: sshd [-46DdeiqTt] [-C connection_spec] [-c host_cert_file]\n"
+"usage: sshd [-46DdeiqTtV] [-C connection_spec] [-c host_cert_file]\n"
 "            [-E log_file] [-f config_file] [-g login_grace_time]\n"
 "            [-h host_key_file] [-o option] [-p port] [-u len]\n"
 	);
@@ -1346,14 +1346,11 @@ send_rexec_state(int fd, struct sshbuf *conf)
 	 *		string	filename
 	 *		string	contents
 	 *	}
-	 *	string	rng_seed (if required)
 	 */
 	if ((r = sshbuf_put_stringb(m, conf)) != 0 ||
 	    (r = sshbuf_put_stringb(m, inc)) != 0)
 		fatal_fr(r, "compose config");
-#if defined(WITH_OPENSSL) && !defined(OPENSSL_PRNG_ONLY)
-	rexec_send_rng_seed(m);
-#endif
+
 	if (ssh_msg_send(fd, 0, m) == -1)
 		error_f("ssh_msg_send failed");
 
@@ -1385,10 +1382,6 @@ recv_rexec_state(int fd, struct sshbuf *conf)
 	if ((r = sshbuf_get_string(m, &cp, &len)) != 0 ||
 	    (r = sshbuf_get_stringb(m, inc)) != 0)
 		fatal_fr(r, "parse config");
-
-#if defined(WITH_OPENSSL) && !defined(OPENSSL_PRNG_ONLY)
-	rexec_recv_rng_seed(m);
-#endif
 
 	if (conf != NULL && (r = sshbuf_put(conf, cp, len)))
 		fatal_fr(r, "sshbuf_put");
@@ -1953,7 +1946,7 @@ accumulate_host_timing_secret(struct sshbuf *server_cfg,
 	if ((buf = sshbuf_new()) == NULL)
 		fatal_f("could not allocate buffer");
 	if ((r = sshkey_private_serialize(key, buf)) != 0)
-		fatal_fr(r, "decode key");
+		fatal_fr(r, "encode %s key", sshkey_ssh_name(key));
 	if (ssh_digest_update(ctx, sshbuf_ptr(buf), sshbuf_len(buf)) != 0)
 		fatal_f("ssh_digest_update");
 	sshbuf_reset(buf);
@@ -1993,11 +1986,15 @@ main(int ac, char **av)
 	int keytype;
 	Authctxt *authctxt;
 	struct connection_info *connection_info = NULL;
+	sigset_t sigmask;
 
 #ifdef HAVE_SECUREWARE
 	(void)set_auth_parameters(ac, av);
 #endif
 	__progname = ssh_get_progname(av[0]);
+
+	sigemptyset(&sigmask);
+	sigprocmask(SIG_SETMASK, &sigmask, NULL);
 
 	/* Save argv. Duplicate so setproctitle emulation doesn't clobber it */
 	saved_argc = ac;
@@ -2019,14 +2016,12 @@ main(int ac, char **av)
 	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
 	sanitise_stdfd();
 
-	seed_rng();
-
 	/* Initialize configuration options to their default values. */
 	initialize_server_options(&options);
 
 	/* Parse command-line arguments. */
 	while ((opt = getopt(ac, av,
-	    "C:E:b:c:f:g:h:k:o:p:u:46DQRTdeiqrtyz")) != -1) {
+	    "C:E:b:c:f:g:h:k:o:p:u:46DQRTdeiqrtVyz")) != -1) {
 		switch (opt) {
 		case '4':
 			options.address_family = AF_INET;
@@ -2127,6 +2122,10 @@ main(int ac, char **av)
 				exit(1);
 			free(line);
 			break;
+		case 'V':
+			fprintf(stderr, "%s, %s\n",
+			    SSH_VERSION, SSH_OPENSSL_VERSION);
+			exit(0);
 		case 'y':
 			privsep_unauth_child = 1;
 			rexec_flag = 0;
@@ -2139,7 +2138,6 @@ main(int ac, char **av)
 			logfile = NULL;
 			//Sleep(10 * 1000);
 			break;
-		case '?':
 		default:
 			usage();
 			break;
@@ -2157,6 +2155,8 @@ main(int ac, char **av)
 		closefrom(PRIVSEP_AUTH_MIN_FREE_FD);
 	else
 		closefrom(REEXEC_DEVCRYPTO_RESERVED_FD);
+
+	seed_rng();
 
 	/* If requested, redirect the logs to the specified logfile. */
 	if (logfile != NULL)
@@ -2643,6 +2643,7 @@ done_loading_hostkeys:
 	/* Prepare the channels layer */
 	channel_init_channels(ssh);
 	channel_set_af(ssh, options.address_family);
+	process_channel_timeouts(ssh, &options);
 	process_permitopen(ssh, &options);
 
 	/* Set SO_KEEPALIVE if requested. */

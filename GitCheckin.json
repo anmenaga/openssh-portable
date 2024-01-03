@@ -13,14 +13,14 @@
         {
           "source": "openssh.man",
           "path": "/onecore/admin/openssh/vpack",
-          "type": "File",
+          "type": "File"
         }
       ]
     }
   ],
   "Email": [
     {
-      "sendTo": "kryalava@microsoft.com;bagajjal@microsoft.com;slee@microsoft.com;daniel.maertens@microsoft.com;tessgauthier@microsoft.com;vthiebaut@microsoft.com"
+      "sendTo": "drewmil@microsoft.com;andrew.menagarishvili@microsoft.com;slee@microsoft.com;daniel.maertens@microsoft.com;tessgauthier@microsoft.com;vthiebaut@microsoft.com"
     }
   ]
 }

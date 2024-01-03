@@ -1,0 +1,253 @@
+#####################################################################################################################################
+#                                               OneBranch Pipelines - Official                                                      #
+#####################################################################################################################################
+#                                                                                                                                   #
+# This pipeline was created by EasyStart from a sample located at:                                                                  #
+#                               https://aka.ms/obpipelines/easystart/samples                                                        #
+#                                                                                                                                   #
+# Windows Undocked Wiki:        https://www.osgwiki.com/wiki/Windows_Undocked_Template                                              #
+# General OB Documentation:     https://aka.ms/obpipelines                                                                          #
+# Build MSBuild project:        https://dev.azure.com/onebranch/OneBranch/_wiki/wikis/OneBranch.wiki/6045/Build-MSBuild-project     #
+# Yaml Schema:                  https://aka.ms/obpipelines/yaml/schema                                                              #
+# Retail Tasks:                 https://aka.ms/obpipelines/tasks                                                                    #
+# Support:                      https://aka.ms/onebranchsup                                                                         #
+#                                                                                                                                   #
+#####################################################################################################################################
+
+# Add this for VPack versioning when using Package ES Setup task
+# name: $(BuildDefinitionName)_$(date:yyMM).$(date:dd)$(rev:rrr)
+
+# https://aka.ms/obpipelines/triggers
+trigger: none 
+
+parameters: # parameters are shown up in ADO UI in a build queue time
+- name: 'debug'
+  displayName: 'Enable debug output'
+  type: boolean
+  default: false
+
+variables:
+  CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
+  system.debug: ${{ parameters.debug }}
+  ENABLE_PRS_DELAYSIGN: 1
+  ROOT: $(Build.SourcesDirectory)
+  REPOROOT: $(Build.SourcesDirectory)
+  OUTPUTROOT: $(REPOROOT)\out
+  NUGET_XMLDOC_MODE: none
+  # Docker image which is used to build the project https://aka.ms/obpipelines/containers
+  WindowsContainerImage: 'onebranch.azurecr.io/windows/ltsc2019/vse2022:latest' 
+  Codeql.Enabled: true #  CodeQL once every 3 days on the default branch for all languages its applicable to in that pipeline.
+  Codeql.TSAEnabled: true
+
+resources:
+  repositories: 
+    - repository: templates
+      type: git
+      name: OneBranch.Pipelines/GovernedTemplates
+      ref: refs/heads/main
+    - repository: OSS_Microsoft_OpenSSH
+      type: git
+      ref: refs/heads/master
+      name: OSS_Microsoft_OpenSSH/OSS_Microsoft_OpenSSH
+
+extends:
+  template: v2/Microsoft.Official.yml@templates # https://aka.ms/obpipelines/templates
+  parameters:
+    platform:
+      name: 'windows_undocked' # windows undocked
+
+    featureFlags:
+      # Use "vnext" for the checks so "CheckCFlags" works. It currently fails due to .NET 6 not being installed.
+      # Windows_SDL_Container_Version: 'vnext'
+      updateOSManifest: # Information for updating OS Manifest OS repository (Learn more: https://www.osgwiki.com/wiki/OneBranch_Windows_Undocked_Pipelines)
+        enabled: true
+        osbranch: 'official/rs_onecore_base2_has3' # should match value in gitcheckin.json
+        source: '/onecore/admin/openssh/vpack/openssh.man'
+        destination: '$(Build.ArtifactStagingDirectory)'
+        manifest: ''
+        paToken: $(git-pat) # only required for cross-org scenarios
+            
+    cloudvault: # Please refer the wiki for more information: https://aka.ms/obpipelines/cloudvault
+      enabled: false
+    
+    globalSdl: # Refer the wiki for more options in this parameter: https://aka.ms/obpipelines/sdl
+      tsa:
+        enabled: true # onebranch publish all sdl results to TSA. If TSA is disabled all SDL tools will forced into 'break' build mode.  Please provide TSAOptions.json.
+      apiscan:
+        enabled: true
+        softwareFolder: $(ob_outputDirectory)\amd64\fre;$(ob_outputDirectory)\i386\fre
+        symbolsFolder: $(ob_outputDirectory)\amd64\fre;$(ob_outputDirectory)\i386\fre
+        softwareName: OpenSSH
+        versionNumber: $(majorVersion).$(minorVersion) # for consistency across GitHub & Windows release
+      binskim:
+        scanOutputDirectoryOnly: true # only binaries in ob_outputDirectory need scanning
+      # suppression:
+      #   suppressionFile: $(Build.SourcesDirectory)\.gdn\global.gdnsuppress
+
+    stages:
+    - stage: build
+      jobs:
+      - job: main
+        pool:
+          # read more about custom job pool types at https://aka.ms/obpipelines/yaml/jobs
+          type: windows  
+
+        variables:
+          # PAT group contains vpack-pat and git-pat
+          - group: PAT
+          
+          # binaries scanning tools are run on this directory ( https://onebranch.visualstudio.com/OneBranch/_wiki/wikis/OneBranch.wiki/4634/SDL-(Static-Analysis)-for-Containerized-Workflows ) and 
+          # this directory is uploaded to pipeline artifacts. More info at https://aka.ms/obpipelines/artifacts
+          - name: ob_outputDirectory
+            value: '$(Build.SourcesDirectory)\package' 
+          - name: ob_sdl_codeSignValidation_excludes
+            value: '-|**\*.exe;-|**\*.dll' # Output Directory
+
+          # createVPack: # information for Vpack (Learn more: https://www.osgwiki.com/wiki/OneBranch_Windows_Undocked_Pipelines)
+          - name: ob_createvpack_enabled
+            value: true
+          - name: ob_createvpack_packagename
+            value: 'openssh'
+          - name: ob_createvpack_description
+            value: 'OpenSSH for Windows'
+          - name: ob_createvpack_versionAs
+            value: parts
+          - name: ob_createvpack_verbose
+            value: false
+          - name: ob_createvpack_majorVer
+            value: $(majorVersion)
+          - name: ob_createvpack_minorVer
+            value: $(minorVersion)
+          - name: ob_createvpack_metadata
+            value: $(Build.SourceVersion)
+          - name: ob_createvpack_targetDestinationDirectory
+            value: "$(Destination)"
+
+        steps:
+          - task: onebranch.pipeline.version@1 # generates automatic version. For other versioning options check https://aka.ms/obpipelines/versioning
+            displayName: 'Setup BuildNumber'
+            inputs:
+              system: 'RevisionCounter'
+              major: '1'
+              minor: '0'
+              exclude_commit: true
+
+          - checkout: OSS_Microsoft_OpenSSH # needed to generate cgmanifest.json
+            clean: True
+            persistCredentials: True
+
+          - pwsh : |
+              # set the version variables based on contents of version.rc file
+              $versionFile = Get-Content -Raw -Path $(Build.SourcesDirectory)\contrib\win32\openssh\version.rc
+              $searchStr = "FILEVERSION"
+              $versionIndex = $versionFile.IndexOf($searchStr) + $searchStr.Length + 1
+              # assumes version won't ever use double digits: https://github.com/openssh/openssh-portable/tags
+              $versionStr = $versionFile.substring($versionIndex, 7).replace(",",".")
+              $majorVersion = $versionStr.split(".")[0]
+              $minorVersion = $versionStr.split(".")[1]
+              $releaseTag = 'v' + $versionStr
+              "Setting VSTS variable 'majorVersion' to '$majorVersion'" | Write-Verbose -Verbose
+              Write-Host "##vso[task.setvariable variable=majorVersion]$majorVersion"
+              "Setting VSTS variable 'minorVersion' to '$minorVersion'" | Write-Verbose -Verbose
+              Write-Host "##vso[task.setvariable variable=minorVersion]$minorVersion"
+            displayName: Get Version Info
+
+          - pwsh: |
+              if (($(majorVersion) -le 8) -and ($(minorVersion) -le 6))
+              {
+                $(Build.SourcesDirectory)\OSS_Microsoft_OpenSSH\OpenSSH\update-cgmanifest.ps1 -OpenSSHDevCheckoutPath ''
+              }
+              else
+              {
+                $(Build.SourcesDirectory)\OSS_Microsoft_OpenSSH\OpenSSH\update-cgmanifest.ps1 -OpenSSHDevCheckoutPath '' -OpenSSHVersionWithLibFido 
+              }
+              cat $(Build.SourcesDirectory)\cgmanifest.json
+            displayName: Update CGManifest
+
+          # Download and extract nuget package with non-stubbed MicrosoftTelemetry.h header
+          - task: NuGetAuthenticate@1
+            inputs:
+              nuGetServiceConnections: msftNugetConnection
+              
+          - task: NuGetCommand@2
+            inputs:
+              command: 'restore'
+              restoreSolution: '$(Build.SourcesDirectory)\contrib\win32\OpenSSH\packages.config'
+              feedsToUse: 'config'
+              nugetConfigPath: '$(Build.SourcesDirectory)\contrib\win32\OpenSSH\NuGet.config'
+              externalFeedCredentials: 'msftNugetConnection'
+              restoreDirectory: 'Nuget'
+
+          # Replace the stubbed MicrosoftTelemetry.h with the real version from the nuget package
+          # Delete the existing stubbed MicrosoftTelemetry.h first, to ensure that if it is no longer at the expected path that the task, and build, fails
+          # if package version changes in packages.config, folder name will need to be updated here
+          - pwsh : | 
+              del $(Build.SourcesDirectory)\contrib\win32\OpenSSH\MicrosoftTelemetry.h
+              mv $(Build.SourcesDirectory)\contrib\win32\OpenSSH\NuGet\Microsoft.Telemetry.Inbox.Native.10.0.18362.1-190318-1202.19h1-release.amd64fre\build\native\inc\MicrosoftTelemetry.h $(Build.SourcesDirectory)\contrib\win32\OpenSSH\
+            displayName: 'MicrosoftTelemetry.h: replace with the real one'
+            failOnStderr: true
+
+          - task: CodeQL3000Init@0
+
+          - pwsh: | 
+              $(Build.SourcesDirectory)\contrib\win32\OpenSSH\OpenSSH-build.ps1 -repolocation $(Build.SourcesDirectory) -destination $(Build.SourcesDirectory)\bin\x64\Release -NativeHostArch x64 -Configuration Release -OneCore
+            displayName: Build x64 OneCore Package
+          - task: CodeQL3000Finalize@0 
+
+          - pwsh: | 
+              $(Build.SourcesDirectory)\contrib\win32\OpenSSH\OpenSSH-build.ps1 -repolocation $(Build.SourcesDirectory) -destination $(Build.SourcesDirectory)\bin\x86\Release -NativeHostArch x86 -Configuration Release -OneCore
+            displayName: Build x86 OneCore Package
+        
+          - pwsh: | 
+              $(Build.SourcesDirectory)\contrib\win32\OpenSSH\OpenSSH-build.ps1 -repolocation $(Build.SourcesDirectory) -destination $(Build.SourcesDirectory)\bin\ARM64\Release -NativeHostArch ARM64 -Configuration Release -OneCore
+            displayName: Build ARM64 OneCore Package
+
+          - pwsh: | 
+              $(Build.SourcesDirectory)\contrib\win32\OpenSSH\OpenSSH-build.ps1 -repolocation $(Build.SourcesDirectory) -destination $(Build.SourcesDirectory)\bin\ARM\Release -NativeHostArch ARM -Configuration Release -OneCore
+            displayName: Build ARM OneCore Package
+
+          - pwsh: |
+              mkdir $(ob_outputDirectory)
+              $arch = @("Win64", "Win32", "arm64", "arm")
+              $folder = @("amd64", "i386", "arm64", "arm")
+              for ($i=0; $i -lt $arch.length; $i++) {
+                $dest_dir = $folder[$i]
+                $curr_dir = 'OpenSSH-' + $arch[$i] + '_symbols'
+                Get-ChildItem -Path "$(Build.SourcesDirectory)\$curr_dir\" -Recurse
+                Write-Host "Create $dest_dir dir"
+                New-Item -ItemType "directory" -Path "$(ob_outputDirectory)\$dest_dir"
+                New-Item -ItemType "directory" -Path "$(ob_outputDirectory)\$dest_dir\fre"
+                Write-Host "Copy $curr_dir dir"
+                Copy-Item "$(Build.SourcesDirectory)\$curr_dir\*" -Destination "$(ob_outputDirectory)\$dest_dir\fre\" -Recurse -Filter *.exe
+                Copy-Item "$(Build.SourcesDirectory)\$curr_dir\*" -Destination "$(ob_outputDirectory)\$dest_dir\fre\" -Recurse -Filter *.dll
+                Copy-Item "$(Build.SourcesDirectory)\$curr_dir\*" -Destination "$(ob_outputDirectory)\$dest_dir\fre\" -Recurse -Filter *.pdb
+              }
+              Write-Host "List the exe and pdb files in the $(ob_outputDirectory) folder to publish"
+              Get-ChildItem -Path "$(ob_outputDirectory)\*" -Recurse
+            displayName: Copy artifacts to output folder
+
+          # For vpack: pull all the exe and dll files from one of the output folders to populate binplace.rsp with blank line in between each; misc files still hard-coded below
+          - pwsh: |
+              Write-Host "Copy the config files to output folder"
+              Write-Host("Create miscfiles dir")
+              New-Item -ItemType "directory" -Path "$(ob_outputDirectory)\miscfiles"
+              Get-ChildItem -Path "$(ob_outputDirectory)\amd64\fre\*" -Include *.exe, *.dll | ForEach { Add-Content -Path "$(ob_outputDirectory)\binplace.rsp" -Value ('$(TARGET_DIRECTORY)\fre\' + $_.name + '
+              ') }
+              Add-Content -Path "$(ob_outputDirectory)\binplace.rsp" -Value 'miscfiles\sshd_config_default
+
+              miscfiles\sshd_config_default_for_installed_by_default
+
+              miscfiles\moduli
+              
+              miscfiles\LICENSE.txt
+              
+              miscfiles\NOTICE.txt'
+
+              cat "$(ob_outputDirectory)\binplace.rsp"
+              Copy-Item "$(Build.SourcesDirectory)\OpenSSH-Win32_symbols\moduli" -Destination "$(ob_outputDirectory)\miscfiles\"
+              Copy-Item "$(Build.SourcesDirectory)\OpenSSH-Win32_symbols\sshd_config_default" -Destination "$(ob_outputDirectory)\miscfiles\"
+              Copy-Item "$(Build.SourcesDirectory)\contrib\win32\OpenSSH\sshd_config_default_for_installed_by_default" -Destination "$(ob_outputDirectory)\miscfiles\"
+              Copy-Item "$(Build.SourcesDirectory)\OpenSSH-Win32_symbols\LICENSE.txt" -Destination "$(ob_outputDirectory)\miscfiles\"
+              Copy-Item "$(Build.SourcesDirectory)\OpenSSH-Win32_symbols\NOTICE.txt" -Destination "$(ob_outputDirectory)\miscfiles\"
+              Get-ChildItem -Path "$(ob_outputDirectory)\miscfiles" -Recurse
+            displayName: Copy config files to output folder

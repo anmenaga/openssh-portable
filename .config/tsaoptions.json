@@ -1,0 +1,23 @@
+{
+    "codebaseName": "OpenSSH_vPack_202108",
+    "notificationAliases": [
+        "tessgauthier@microsoft.com",
+        "andrew.menagarishvili@microsoft.com",
+        "vthiebaut@microsoft.com"
+    ],
+    "codebaseAdmins": [
+        "NORTHAMERICA\\tessgauthier",
+        "NORTHAMERICA\\vthiebaut"
+    ],
+    "instanceUrl": "https://msazure.visualstudio.com/defaultcollection",
+    "projectName": "One",
+    "areaPath": "One\\MGMT\\Compute\\Powershell\\OpenSSH\\Win32-OpenSSH",
+    "iterationPath": "One\\custom\\_Default",
+    "tools": [
+        "APIScan",
+        "BinSkim",
+        "CredScan",
+        "Policheck"
+    ],
+    "template": "TFSMSAzure"
+}

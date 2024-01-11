@@ -78,6 +78,8 @@ AuthorizedKeysFile	.ssh/authorized_keys
 # override default of no subsystems
 Subsystem	sftp	sftp-server.exe
 
+AllowGroups administrators "openssh users"
+
 # Example of overriding settings on a per-user basis
 #Match User anoncvs
 #	AllowTcpForwarding no

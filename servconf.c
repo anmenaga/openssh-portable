@@ -11,7 +11,9 @@
  */
 
 #include "includes.h"
+#ifdef WINDOWS
 #include <LM.h>
+#endif // WINDOWS
 
 #include <sys/types.h>
 #include <sys/socket.h>

@@ -1861,7 +1861,7 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 		uintptr = &options->num_allow_users;
  parse_allowdenyusers:
 		while ((arg = argv_next(&ac, &av)) != NULL) {
-
+#ifdef WINDOWS
 			// it can be a SID string; if it is - use localized name for that SID
 			PSID Sid = NULL;
 			char* utf8_user_name = NULL;
@@ -1888,7 +1888,7 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 			{
 				debug3_f("'%s' not recognized as SID", arg);
 			}
-
+#endif // WINDOWS
 			if (*arg == '\0' ||
 			    match_user(NULL, NULL, NULL, arg) == -1)
 				fatal("%s line %d: invalid %s pattern: \"%s\"",
@@ -1897,11 +1897,12 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 				continue;
 			opt_array_append(filename, linenum, keyword,
 			    chararrayptr, uintptr, arg);
-
+#ifdef WINDOWS
 			if (utf8_user_name)
 				free(utf8_user_name);
 			if (arg_utf16)
 				free(arg_utf16);
+#endif // WINDOWS
 		}
 		break;
 
@@ -1918,7 +1919,7 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 			if (*arg == '\0')
 				fatal("%s line %d: empty %s pattern",
 				    filename, linenum, keyword);
-
+#ifdef WINDOWS
 			// it can be a SID string; if it is - use localized name for that SID
 			PSID Sid = NULL;
 			char* utf8_group_name = NULL;
@@ -1945,16 +1946,17 @@ process_server_config_line_depth(ServerOptions *options, char *line,
 			{
 				debug3_f("'%s' not recognized as SID", arg);
 			}
-
+#endif // WINDOWS
 			if (!*activep)
 				continue;
 			opt_array_append(filename, linenum, keyword,
 			    chararrayptr, uintptr, arg);
-
+#ifdef WINDOWS
 			if (utf8_group_name)
 				free(utf8_group_name);
 			if (arg_utf16)
 				free(arg_utf16);
+#endif // WINDOWS
 		}
 		break;
 

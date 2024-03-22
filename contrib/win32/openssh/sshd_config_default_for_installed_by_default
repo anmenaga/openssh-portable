@@ -78,7 +78,8 @@ AuthorizedKeysFile	.ssh/authorized_keys
 # override default of no subsystems
 Subsystem	sftp	sftp-server.exe
 
-AllowGroups administrators "openssh users"
+# AllowGroups "Administrators" and "OpenSSH Users"
+AllowGroups S-1-5-32-544 S-1-5-32-585
 
 # Example of overriding settings on a per-user basis
 #Match User anoncvs
@@ -86,5 +87,6 @@ AllowGroups administrators "openssh users"
 #	PermitTTY no
 #	ForceCommand cvs server
 
-Match Group administrators
+# Match Group "Administrators"
+Match Group S-1-5-32-544
        AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
